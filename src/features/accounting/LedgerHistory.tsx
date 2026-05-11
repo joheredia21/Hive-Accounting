@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   History, ExternalLink, RefreshCw, Search, FileText,
   AlertTriangle, ChevronDown, ChevronUp, Scale,
@@ -112,7 +112,7 @@ const LedgerHistory = ({ username }: LedgerHistoryProps) => {
   const [error, setError]           = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  const loadHistory = async () => {
+  const loadHistory = useCallback(async () => {
     try {
       setLoading(true);
       setError(false);
@@ -124,11 +124,11 @@ const LedgerHistory = ({ username }: LedgerHistoryProps) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [username]);
 
   useEffect(() => {
     if (username) loadHistory();
-  }, [username]);
+  }, [username, loadHistory]);
 
   const toggleRow = (txId: string) => {
     setExpandedRows((prev) => {

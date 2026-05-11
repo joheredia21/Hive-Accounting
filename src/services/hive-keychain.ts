@@ -14,7 +14,7 @@ import { AccountingJournal, AccountingPayload } from '../types/accounting';
 declare global {
   interface Window {
     hive_keychain?: {
-      requestHandshake(callback: () => void): void;
+      requestHandshake?: (callback: () => void) => void;
 
       requestSignBuffer(
         account: string,
@@ -67,8 +67,8 @@ declare global {
 export interface KeychainResponse {
   success: boolean;
   message: string;
-  result: any;
-  data: any;
+  result: unknown;
+  data: unknown;
   request_id: number;
 }
 
@@ -77,21 +77,39 @@ export interface KeychainResponse {
 export const checkKeychainAvailable = (): boolean =>
   typeof window !== 'undefined' && !!window.hive_keychain;
 
+/**
+ * Strips the '@' prefix from a Hive username if present.
+ */
+export const cleanUsername = (username: string): string =>
+  username.trim().toLowerCase().replace(/^@/, '');
+
 export const loginWithKeychain = (username: string): Promise<KeychainResponse> =>
   new Promise((resolve, reject) => {
     if (!checkKeychainAvailable()) {
       reject(new Error('Hive Keychain is not installed'));
       return;
     }
-    window.hive_keychain!.requestSignBuffer(
-      username,
-      `Login to Hive Accounting – ${Date.now()}`,
-      'Posting',
-      (response) => {
-        if (response.success) resolve(response);
-        else reject(new Error(response.message));
-      }
-    );
+
+    const account = cleanUsername(username);
+
+    // Some Keychain versions benefit from a handshake before the first request
+    const signRequest = () => {
+      window.hive_keychain!.requestSignBuffer(
+        account,
+        `Login to Hive Accounting: ${Date.now()}`, // Standard hyphen/colon to avoid encoding issues
+        'Posting',
+        (response) => {
+          if (response.success) resolve(response);
+          else reject(new Error(response.message));
+        }
+      );
+    };
+
+    if (window.hive_keychain!.requestHandshake) {
+      window.hive_keychain!.requestHandshake(signRequest);
+    } else {
+      signRequest();
+    }
   });
 
 // ─── Legacy single-step functions (kept for backward compat) ──────────────────
@@ -108,9 +126,10 @@ export const transferFunds = (
       reject(new Error('Hive Keychain is not installed'));
       return;
     }
+    const from = cleanUsername(sender);
     const formattedAmount = Number(amount).toFixed(3);
     window.hive_keychain!.requestTransfer(
-      sender, receiver, formattedAmount, memo, currency,
+      from, receiver, formattedAmount, memo, currency,
       (response) => {
         if (response.success) resolve(response);
         else reject(new Error(response.message));
@@ -120,13 +139,14 @@ export const transferFunds = (
 
 export const registerLedgerEntry = (
   account: string,
-  transactionData: any
+  transactionData: Record<string, unknown>
 ): Promise<KeychainResponse> =>
   new Promise((resolve, reject) => {
     if (!checkKeychainAvailable()) {
       reject(new Error('Hive Keychain is not installed'));
       return;
     }
+    const user = cleanUsername(account);
     const payload = {
       app: 'hive-accounting/1.0',
       action: 'register_payment',
@@ -134,7 +154,7 @@ export const registerLedgerEntry = (
       data: transactionData,
     };
     window.hive_keychain!.requestCustomJson(
-      account, 'hive_accounting_ledger', 'Active',
+      user, 'hive_accounting_ledger', 'Active',
       JSON.stringify(payload), 'Register accounting entry',
       (response) => {
         if (response.success) resolve(response);
@@ -176,6 +196,7 @@ export const broadcastPaymentWithLedger = (
       return;
     }
 
+    const from = cleanUsername(sender);
     const formattedAmount = `${Number(amount).toFixed(3)} ${currency}`;
 
     // Build the accounting payload that will live on-chain as custom_json
@@ -192,7 +213,7 @@ export const broadcastPaymentWithLedger = (
       [
         'transfer',
         {
-          from: sender,
+          from: from,
           to: receiver,
           amount: formattedAmount,
           memo,
@@ -201,7 +222,7 @@ export const broadcastPaymentWithLedger = (
       [
         'custom_json',
         {
-          required_auths: [sender],          // Active auth (financial op)
+          required_auths: [from],          // Active auth (financial op)
           required_posting_auths: [],
           id: 'hive_accounting_ledger',
           json: JSON.stringify(accountingPayload),
@@ -210,7 +231,7 @@ export const broadcastPaymentWithLedger = (
     ];
 
     window.hive_keychain!.requestBroadcast(
-      sender,
+      from,
       operations,
       'Active',                             // Active key signs both ops
       (response) => {
@@ -241,6 +262,7 @@ export const registerExternalTxWithLedger = (
       return;
     }
 
+    const user = cleanUsername(account);
     const accountingPayload: AccountingPayload = {
       app: 'hive-accounting/1.0',
       version: '1.0',
@@ -251,7 +273,7 @@ export const registerExternalTxWithLedger = (
     };
 
     window.hive_keychain!.requestCustomJson(
-      account,
+      user,
       'hive_accounting_ledger',
       'Active',
       JSON.stringify(accountingPayload),

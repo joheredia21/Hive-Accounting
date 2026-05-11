@@ -1,4 +1,4 @@
-import { useState, useEffect, FormEvent, useMemo } from 'react';
+import { useState, useEffect, FormEvent, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Wallet, Send, FileCheck, CheckCircle2, AlertCircle, LogIn,
@@ -10,6 +10,7 @@ import {
   loginWithKeychain,
   broadcastPaymentWithLedger,
   registerExternalTxWithLedger,
+  cleanUsername,
 } from '../../services/hive-keychain';
 import {
   buildJournalEntry,
@@ -140,7 +141,8 @@ const AccountingDashboard = ({ onLogout }: { onLogout?: () => void }) => {
   const [txId, setTxId]                   = useState('');
 
   useEffect(() => {
-    setTimeout(() => setIsKeychainAvailable(checkKeychainAvailable()), 500);
+    const timer = setTimeout(() => setIsKeychainAvailable(checkKeychainAvailable()), 500);
+    return () => clearTimeout(timer);
   }, []);
 
   // Sync credit account when currency changes
@@ -162,21 +164,26 @@ const AccountingDashboard = ({ onLogout }: { onLogout?: () => void }) => {
     });
   }, [receiver, amount, currency, memo, debitAccount, creditAccount, entryMode]);
 
-  const handleLogin = async (e: FormEvent) => {
+  const handleLogin = useCallback(async (e: FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) return;
+    const cleanAccount = cleanUsername(username);
+    if (!cleanAccount) return;
+    
     try {
       setStatus('processing');
-      await loginWithKeychain(username);
+      setErrorMessage('');
+      await loginWithKeychain(cleanAccount);
+      setUsername(cleanAccount); // Update state to cleaned version
       setIsLoggedIn(true);
       setStatus('idle');
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Login error');
+    } catch (err: unknown) {
+      console.error('Login error:', err);
+      setErrorMessage(err instanceof Error ? err.message : 'Login error');
       setStatus('error');
     }
-  };
+  }, [username]);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = useCallback(async (e: FormEvent) => {
     e.preventDefault();
     if (entryMode === 'payment' && (!receiver || !amount || isNaN(Number(amount)) || Number(amount) <= 0)) {
       setErrorMessage('Please enter a valid recipient and amount.');
@@ -214,10 +221,12 @@ const AccountingDashboard = ({ onLogout }: { onLogout?: () => void }) => {
         );
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response.result as any;
       const transactionId =
-        response.result?.id ||
-        response.result?.trx_id ||
-        response.result?.tx_id ||
+        result?.id ||
+        result?.trx_id ||
+        result?.tx_id ||
         '';
       setTxId(transactionId);
       setStatus('success');
@@ -227,12 +236,12 @@ const AccountingDashboard = ({ onLogout }: { onLogout?: () => void }) => {
       setAmount('');
       setExternalTx('');
       setMemo(entryMode === 'payment' ? 'Developer payment' : 'Manual Entry');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setErrorMessage(err.message || 'Transaction error');
+      setErrorMessage(err instanceof Error ? err.message : 'Transaction error');
       setStatus('error');
     }
-  };
+  }, [entryMode, receiver, amount, externalTx, journalPreview, username, currency, memo]);
 
   // ── Keychain not installed ────────────────────────────────────────────────
   if (!isKeychainAvailable) {

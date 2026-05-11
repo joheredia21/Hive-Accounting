@@ -1,5 +1,5 @@
 import { Client } from '@hiveio/dhive';
-import { AccountingJournal } from '../types/accounting';
+import { AccountingJournal, JournalLine } from '../types/accounting';
 
 const HIVE_NODES = [
   'https://api.hive.blog',
@@ -50,14 +50,15 @@ export const fetchLedgerHistory = async (username: string): Promise<LedgerEntry[
   let reachedEnd   = false;
 
   while (pagesFetched < MAX_PAGES && !reachedEnd) {
-    let history: any[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let history: [number, any][];
     try {
       history = await client.call('condenser_api', 'get_account_history', [
         username,
         startIndex,
         PAGE_SIZE,
       ]);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error fetching account history:', err);
       break;
     }
@@ -69,16 +70,19 @@ export const fetchLedgerHistory = async (username: string): Promise<LedgerEntry[
 
     for (const item of history) {
       const globalSeq: number = item[0];
-      const txData             = item[1];
-      const op                 = txData.op;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const txData: any        = item[1];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const op: any            = txData.op;
       const opType: string     = op[0];
-      const opBody             = op[1];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const opBody: any        = op[1];
 
       // ── CASE 1: custom_json from our ledger ──────────────────────────────
       if (opType === 'custom_json' && opBody.id === 'hive_accounting_ledger') {
         try {
           const json = JSON.parse(opBody.json);
-          const key  = txData.trx_id;
+          const key: string = txData.trx_id;
 
           if (!ledgerMap.has(key)) {
             // ── NEW FORMAT: action === 'journal_entry' ──────────────────────
@@ -87,10 +91,10 @@ export const fetchLedgerHistory = async (username: string): Promise<LedgerEntry[
 
               // Derive amount from sum of debit lines
               const totalDebit = journal.lines.reduce(
-                (s: number, l: any) => s + (Number(l.debit) || 0), 0
+                (s: number, l: JournalLine) => s + (Number(l.debit) || 0), 0
               );
               // Derive category from the first debit account name
-              const debitLine = journal.lines.find((l: any) => l.debit > 0);
+              const debitLine = journal.lines.find((l: JournalLine) => Number(l.debit) > 0);
 
               ledgerMap.set(key, {
                 timestamp:    txData.timestamp,
@@ -133,9 +137,13 @@ export const fetchLedgerHistory = async (username: string): Promise<LedgerEntry[
 
       // ── CASE 2: outgoing transfer (fallback / full audit trail) ───────────
       if (opType === 'transfer' && opBody.from === username) {
-        const key = txData.trx_id;
+        const key: string = txData.trx_id;
         if (!transferMap.has(key)) {
-          const [amountStr, currency] = (opBody.amount as string).split(' ');
+          const amountValue = opBody.amount;
+          const [amountStr, currency] = typeof amountValue === 'string' 
+            ? amountValue.split(' ') 
+            : [String(amountValue), 'HIVE'];
+          
           transferMap.set(key, {
             timestamp:    txData.timestamp,
             type:         'transfer',
