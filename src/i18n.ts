@@ -19,7 +19,9 @@ const resources = {
           "audit_desc": "Public ledger allows anyone to verify financial records instantly."
         },
         "audit_input_placeholder": "Enter Hive account (e.g. vane08)",
-        "audit_now": "Audit Account"
+        "audit_now": "Audit Account",
+        "projects_title": "The Gold Standard for Project Transparency",
+        "projects_desc": "Empower your community with radical financial clarity. Hive Accounting offers a sophisticated infrastructure for projects to exhibit their ledger with immutable, blockchain-verified proof. Build trust through open accounting."
       },
       "audit": {
         "title": "Public Audit",
@@ -68,7 +70,9 @@ const resources = {
           "audit_desc": "El libro mayor público permite a cualquiera verificar registros financieros al instante."
         },
         "audit_input_placeholder": "Ingresa cuenta de Hive (ej. vane08)",
-        "audit_now": "Realizar Auditoría"
+        "audit_now": "Realizar Auditoría",
+        "projects_title": "El Estándar de Oro para la Transparencia de Proyectos",
+        "projects_desc": "Empodera a tu comunidad con una claridad financiera radical. Hive Accounting ofrece una infraestructura sofisticada para que los proyectos exhiban su libro mayor con pruebas inmutables y verificadas por la blockchain. Construye confianza a través de una contabilidad abierta."
       },
       "audit": {
         "title": "Auditoría Pública",
@@ -106,7 +110,7 @@ i18n
   .use(initReactI18next)
   .init({
     resources,
-    lng: 'es', // default language
+    lng: 'en', // default language
     fallbackLng: 'en',
     interpolation: {
       escapeValue: false

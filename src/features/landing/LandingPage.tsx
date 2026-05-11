@@ -89,17 +89,10 @@ const LandingPage = ({ onStartAudit, onGoToDashboard }: LandingPageProps) => {
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </button>
               
-              <div className="flex items-center gap-6 px-6 py-3">
-                <div className="flex -space-x-3">
-                  {[1, 2, 3, 4].map(i => (
-                    <div key={i} className="w-10 h-10 rounded-full border-2 border-white bg-gray-200 overflow-hidden shadow-sm">
-                      <img src={`https://i.pravatar.cc/100?u=${i}`} alt="user" />
-                    </div>
-                  ))}
-                </div>
+              <div className="flex items-center gap-6 px-2 py-3">
                 <div className="text-sm">
-                  <div className="font-bold text-hive-dark">500+ Businesses</div>
-                  <div className="text-hive-gray">Audited this month</div>
+                  <div className="font-bold text-hive-dark">Decentralized & Immutable</div>
+                  <div className="text-hive-gray">Powered by Hive Blockchain</div>
                 </div>
               </div>
             </div>
@@ -132,18 +125,12 @@ const LandingPage = ({ onStartAudit, onGoToDashboard }: LandingPageProps) => {
 
               <div className="space-y-4">
                 {[1, 2, 3].map(i => (
-                  <div key={i} className="flex items-center justify-between p-4 bg-white/50 rounded-2xl border border-gray-100 hover:border-hive-red/30 transition-colors">
+                  <div key={i} className="flex items-center justify-between p-4 bg-white/50 rounded-2xl border border-gray-100">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center font-bold text-xs">TX</div>
-                      <div>
-                        <div className="font-bold text-sm">Payment Received</div>
-                        <div className="text-[10px] font-mono text-gray-400">f9a2...3b1e</div>
-                      </div>
+                      <div className="w-10 h-2 bg-gray-100 rounded-full" />
+                      <div className="w-24 h-4 bg-gray-50 rounded-full" />
                     </div>
-                    <div className="text-right">
-                      <div className="font-black text-sm text-green-600">+ 150.000 HBD</div>
-                      <div className="text-[10px] text-gray-400">Audited via App</div>
-                    </div>
+                    <div className="w-16 h-4 bg-gray-100 rounded-full" />
                   </div>
                 ))}
               </div>
@@ -201,43 +188,67 @@ const LandingPage = ({ onStartAudit, onGoToDashboard }: LandingPageProps) => {
           ))}
         </section>
 
+        {/* Projects & Transparency Section */}
+        <section className="mt-40 max-w-4xl mx-auto text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-red-50 text-hive-red rounded-full text-xs font-bold uppercase tracking-wider mb-6 border border-red-100">
+              <ShieldCheck className="w-3 h-3" />
+              <span>For Business & Projects</span>
+            </div>
+            <h2 className="text-4xl md:text-5xl font-black text-hive-dark mb-8">
+              {t('landing.projects_title')}
+            </h2>
+            <p className="text-xl text-hive-gray leading-relaxed mb-12">
+              {t('landing.projects_desc')}
+            </p>
+            <div className="h-[2px] w-24 bg-gradient-to-r from-transparent via-hive-red/30 to-transparent mx-auto" />
+          </motion.div>
+        </section>
+
+
         {/* Audit Input Section */}
         <section id="audit-section" className="mt-40">
           <motion.div 
             initial={{ opacity: 0, y: 40 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="max-w-3xl mx-auto glass rounded-[40px] p-12 text-center relative overflow-hidden"
+            className="max-w-3xl mx-auto glass rounded-[30px] sm:rounded-[40px] p-6 sm:p-12 text-center relative overflow-hidden"
           >
             <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-hive-red via-orange-500 to-hive-red" />
             
-            <h2 className="text-4xl font-black text-hive-dark mb-6">
+            <h2 className="text-3xl sm:text-4xl font-black text-hive-dark mb-6">
               {t('landing.audit_now')}
             </h2>
             <p className="text-lg text-hive-gray mb-10">
               {t('landing.benefits.audit_desc')}
             </p>
 
-            <form onSubmit={handleAuditSubmit} className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
-                <Search className="w-6 h-6 text-hive-gray group-focus-within:text-hive-red transition-colors" />
+            <form onSubmit={handleAuditSubmit} className="flex flex-col sm:relative group">
+              <div className="relative w-full">
+                <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
+                  <Search className="w-6 h-6 text-hive-gray group-focus-within:text-hive-red transition-colors" />
+                </div>
+                <input 
+                  type="text"
+                  value={auditAccount}
+                  onChange={(e) => setAuditAccount(e.target.value)}
+                  placeholder={t('landing.audit_input_placeholder')}
+                  className="w-full pl-16 pr-6 sm:pr-44 py-5 sm:py-6 bg-white rounded-2xl sm:rounded-3xl border-2 border-gray-100 focus:border-hive-red focus:ring-4 focus:ring-red-500/10 transition-all outline-none text-lg sm:text-xl font-bold text-hive-dark shadow-inner"
+                />
               </div>
-              <input 
-                type="text"
-                value={auditAccount}
-                onChange={(e) => setAuditAccount(e.target.value)}
-                placeholder={t('landing.audit_input_placeholder')}
-                className="w-full pl-16 pr-44 py-6 bg-white rounded-3xl border-2 border-gray-100 focus:border-hive-red focus:ring-4 focus:ring-red-500/10 transition-all outline-none text-xl font-bold text-hive-dark shadow-inner"
-              />
               <button 
                 type="submit"
-                className="absolute right-3 top-3 bottom-3 px-8 bg-hive-dark text-white rounded-2xl font-black hover:bg-black transition-all active:scale-95 shadow-lg flex items-center gap-2"
+                className="mt-4 sm:mt-0 sm:absolute sm:right-3 sm:top-3 sm:bottom-3 px-8 py-4 sm:py-0 bg-hive-dark text-white rounded-xl sm:rounded-2xl font-black hover:bg-black transition-all active:scale-95 shadow-lg flex items-center justify-center gap-2"
               >
                 {t('landing.audit_now')}
               </button>
             </form>
             
-            <div className="mt-8 flex items-center justify-center gap-4 text-sm font-bold text-hive-gray uppercase tracking-widest">
+            <div className="mt-8 flex items-center justify-center gap-4 text-xs font-bold text-hive-gray uppercase tracking-widest">
               <span className="w-8 h-[1px] bg-gray-200" />
               Powered by Hive Blockchain
               <span className="w-8 h-[1px] bg-gray-200" />
