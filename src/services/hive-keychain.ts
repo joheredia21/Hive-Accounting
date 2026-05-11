@@ -219,3 +219,46 @@ export const broadcastPaymentWithLedger = (
       }
     );
   });
+
+/**
+ * Registers an accounting entry in the ledger that references an EXISTING external transaction
+ * (e.g., an exchange withdrawal or a transaction performed outside this app).
+ *
+ * This DOES NOT perform a new transfer. It only broadcasts the CUSTOM_JSON entry.
+ *
+ * @param account    - Hive username registering the entry
+ * @param externalTx - The reference transaction ID (trx_id)
+ * @param journal    - Full double-entry journal
+ */
+export const registerExternalTxWithLedger = (
+  account: string,
+  externalTx: string,
+  journal: AccountingJournal
+): Promise<KeychainResponse> =>
+  new Promise((resolve, reject) => {
+    if (!checkKeychainAvailable()) {
+      reject(new Error('Hive Keychain is not installed'));
+      return;
+    }
+
+    const accountingPayload: AccountingPayload = {
+      app: 'hive-accounting/1.0',
+      version: '1.0',
+      action: 'journal_entry',
+      timestamp: new Date().toISOString(),
+      journal,
+      external_reference: externalTx,
+    };
+
+    window.hive_keychain!.requestCustomJson(
+      account,
+      'hive_accounting_ledger',
+      'Active',
+      JSON.stringify(accountingPayload),
+      `Register ledger for TX: ${externalTx.substring(0, 10)}...`,
+      (response) => {
+        if (response.success) resolve(response);
+        else reject(new Error(response.message));
+      }
+    );
+  });

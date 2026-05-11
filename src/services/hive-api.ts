@@ -21,9 +21,10 @@ export interface LedgerEntry {
   currency: string;
   receiver: string;
   memo: string;
-  reference_tx: string;   // trx_id of the transfer
-  txId: string;           // trx_id of the custom_json (same when atomic)
+  reference_tx: string;   // trx_id of the transfer or external reference
+  txId: string;           // trx_id of the custom_json
   source: 'ledger' | 'transfer';
+  externalReference?: string;
   /** Full double-entry journal (present only for new-format entries) */
   journal?: AccountingJournal;
 }
@@ -99,9 +100,10 @@ export const fetchLedgerHistory = async (username: string): Promise<LedgerEntry[
                 currency:     journal.currency ?? 'HIVE',
                 receiver:     journal.payee ?? '',
                 memo:         journal.description ?? '',
-                reference_tx: txData.trx_id,  // same tx (atomic broadcast)
+                reference_tx: json.external_reference ?? txData.trx_id,
                 txId:         txData.trx_id,
                 source:       'ledger',
+                externalReference: json.external_reference,
                 journal,
               });
 

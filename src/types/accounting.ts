@@ -66,6 +66,7 @@ export interface AccountingPayload {
   action: 'journal_entry';
   timestamp: string;            // ISO 8601
   journal: AccountingJournal;
+  external_reference?: string;
 }
 
 // ─── Helper utilities ─────────────────────────────────────────────────────────

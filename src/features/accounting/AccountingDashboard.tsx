@@ -1,13 +1,15 @@
 import { useState, useEffect, FormEvent, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Wallet, Send, FileCheck, CheckCircle2, AlertCircle, LogIn,
   Activity, BookOpen, ChevronDown, ChevronUp, Scale, Eye, EyeOff,
-  ExternalLink,
+  ExternalLink, Hash, ArrowLeft
 } from 'lucide-react';
 import {
   checkKeychainAvailable,
   loginWithKeychain,
   broadcastPaymentWithLedger,
+  registerExternalTxWithLedger,
 } from '../../services/hive-keychain';
 import {
   buildJournalEntry,
@@ -16,6 +18,7 @@ import {
   CHART_OF_ACCOUNTS,
 } from '../../types/accounting';
 import LedgerHistory from './LedgerHistory';
+import LanguageToggle from '../../components/common/LanguageToggle';
 
 // ─── Journal Preview Component ────────────────────────────────────────────────
 
@@ -113,20 +116,23 @@ const JournalPreview = ({
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
-const AccountingDashboard = () => {
+const AccountingDashboard = ({ onLogout }: { onLogout?: () => void }) => {
+  const { t } = useTranslation();
   const [username, setUsername]               = useState('');
   const [isLoggedIn, setIsLoggedIn]           = useState(false);
   const [isKeychainAvailable, setIsKeychainAvailable] = useState(true);
   const [showLedger, setShowLedger]           = useState(false);
   const [showJournal, setShowJournal]         = useState(true);
+  const [entryMode, setEntryMode]             = useState<'payment' | 'manual'>('payment');
 
-  // Payment form
+  // Payment/Manual form
   const [receiver, setReceiver]   = useState('');
   const [amount, setAmount]       = useState('');
   const [currency, setCurrency]   = useState<'HIVE' | 'HBD'>('HBD');
   const [memo, setMemo]           = useState('Developer payment');
   const [debitAccount, setDebitAccount]   = useState('6.1.01');
   const [creditAccount, setCreditAccount] = useState('1.1.02');
+  const [externalTx, setExternalTx]       = useState('');
 
   // UI state
   const [status, setStatus]               = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
@@ -145,16 +151,16 @@ const AccountingDashboard = () => {
   // Build journal preview reactively from form values
   const journalPreview: AccountingJournal | null = useMemo(() => {
     const parsedAmount = parseFloat(amount);
-    if (!receiver || !parsedAmount || parsedAmount <= 0) return null;
+    if ((entryMode === 'payment' && !receiver) || !parsedAmount || parsedAmount <= 0) return null;
     return buildJournalEntry({
-      receiver,
+      receiver: entryMode === 'payment' ? receiver : 'External Entity',
       amount: parsedAmount,
       currency,
-      memo: memo || 'Payment',
+      memo: memo || (entryMode === 'payment' ? 'Payment' : 'Manual Entry'),
       debitAccountCode: debitAccount,
       creditAccountCode: creditAccount,
     });
-  }, [receiver, amount, currency, memo, debitAccount, creditAccount]);
+  }, [receiver, amount, currency, memo, debitAccount, creditAccount, entryMode]);
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -170,10 +176,15 @@ const AccountingDashboard = () => {
     }
   };
 
-  const handlePayment = async (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!receiver || !amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+    if (entryMode === 'payment' && (!receiver || !amount || isNaN(Number(amount)) || Number(amount) <= 0)) {
       setErrorMessage('Please enter a valid recipient and amount.');
+      setStatus('error');
+      return;
+    }
+    if (entryMode === 'manual' && (!externalTx || !amount)) {
+      setErrorMessage('Please enter external TX and amount.');
       setStatus('error');
       return;
     }
@@ -183,21 +194,26 @@ const AccountingDashboard = () => {
       setStatus('processing');
       setErrorMessage('');
 
-      /**
-       * Broadcast TRANSFER + CUSTOM_JSON atomically in one transaction.
-       * Both operations share the same trx_id – one Keychain prompt,
-       * one block confirmation, one link in the block explorer.
-       */
-      const response = await broadcastPaymentWithLedger(
-        username,
-        receiver,
-        amount,
-        currency,
-        memo,
-        journalPreview
-      );
+      let response;
+      if (entryMode === 'payment') {
+        response = await broadcastPaymentWithLedger(
+          username,
+          receiver,
+          amount,
+          currency,
+          memo,
+          journalPreview
+        );
+      } else {
+        // Clean up externalTx in case it's a link
+        const cleanTx = externalTx.split('/').pop()?.split('?')[0] || externalTx;
+        response = await registerExternalTxWithLedger(
+          username,
+          cleanTx,
+          journalPreview
+        );
+      }
 
-      // The transaction ID covers both the transfer and the journal entry
       const transactionId =
         response.result?.id ||
         response.result?.trx_id ||
@@ -209,7 +225,8 @@ const AccountingDashboard = () => {
       // Reset form
       setReceiver('');
       setAmount('');
-      setMemo('Developer payment');
+      setExternalTx('');
+      setMemo(entryMode === 'payment' ? 'Developer payment' : 'Manual Entry');
     } catch (err: any) {
       console.error(err);
       setErrorMessage(err.message || 'Transaction error');
@@ -243,6 +260,13 @@ const AccountingDashboard = () => {
     return (
       <div className="max-w-md mx-auto mt-10">
         <div className="bg-white p-8 rounded-2xl shadow-xl shadow-gray-200/50 border border-gray-100 animate-slide-up">
+          <button 
+            onClick={onLogout}
+            className="mb-6 flex items-center gap-1 text-xs font-bold text-hive-gray hover:text-hive-red transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Back
+          </button>
           <div className="flex justify-center mb-6">
             <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center">
               <LogIn className="w-8 h-8 text-hive-red" />
@@ -302,58 +326,106 @@ const AccountingDashboard = () => {
 
       {/* Header */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <p className="text-sm text-hive-gray font-medium uppercase tracking-wider">Active Account</p>
-          <div className="flex items-center gap-2 mt-1">
-            <div className="w-8 h-8 bg-gradient-to-tr from-hive-red to-orange-500 rounded-full shadow-inner flex items-center justify-center text-white font-bold">
-              {username.charAt(0).toUpperCase()}
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={onLogout}
+            className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-hive-gray"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <p className="text-sm text-hive-gray font-medium uppercase tracking-wider">{t('dashboard.active_account')}</p>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="w-8 h-8 bg-gradient-to-tr from-hive-red to-orange-500 rounded-full shadow-inner flex items-center justify-center text-white font-bold">
+                {username.charAt(0).toUpperCase()}
+              </div>
+              <h2 className="text-xl font-bold text-hive-dark">@{username}</h2>
             </div>
-            <h2 className="text-xl font-bold text-hive-dark">@{username}</h2>
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <LanguageToggle />
           <button
             onClick={() => setShowLedger(!showLedger)}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-hive-dark hover:bg-gray-50 transition-all shadow-sm"
           >
             <BookOpen className="w-4 h-4 text-hive-red" />
-            {showLedger ? 'Hide Ledger' : 'View Ledger'}
+            {showLedger ? t('dashboard.hide_ledger') : t('dashboard.view_ledger')}
             {showLedger ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
-          <div className="bg-green-50 text-green-700 px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 border border-green-100">
+          <div className="hidden sm:flex bg-green-50 text-green-700 px-4 py-2 rounded-full text-sm font-medium items-center gap-2 border border-green-100">
             <div className="w-2 h-2 rounded-full bg-green-500" />
-            Connected
+            {t('dashboard.connected')}
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-        {/* ── Payment Form ─────────────────────────────────────────────────── */}
+        {/* ── Entry Form ─────────────────────────────────────────────────── */}
         <div className="bg-white p-8 rounded-2xl shadow-xl shadow-gray-200/40 border border-gray-100">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-red-50 rounded-lg">
-              <Send className="w-6 h-6 text-hive-red" />
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-50 rounded-lg">
+                {entryMode === 'payment' ? <Send className="w-6 h-6 text-hive-red" /> : <Hash className="w-6 h-6 text-hive-red" />}
+              </div>
+              <h3 className="text-xl font-bold text-hive-dark">
+                {entryMode === 'payment' ? t('dashboard.new_payment') : t('dashboard.manual_entry')}
+              </h3>
             </div>
-            <h3 className="text-xl font-bold text-hive-dark">New Payment</h3>
+            
+            <div className="flex bg-gray-100 p-1 rounded-xl">
+              <button 
+                onClick={() => setEntryMode('payment')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${entryMode === 'payment' ? 'bg-white shadow-sm text-hive-red' : 'text-hive-gray'}`}
+              >
+                PAY
+              </button>
+              <button 
+                onClick={() => setEntryMode('manual')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${entryMode === 'manual' ? 'bg-white shadow-sm text-hive-red' : 'text-hive-gray'}`}
+              >
+                MANUAL
+              </button>
+            </div>
           </div>
 
-          <form onSubmit={handlePayment} className="space-y-5">
-            {/* Recipient */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Recipient</label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">@</span>
-                <input
-                  type="text"
-                  value={receiver}
-                  onChange={(e) => setReceiver(e.target.value.toLowerCase())}
-                  className="w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hive-red focus:border-transparent transition-all outline-none"
-                  placeholder="username"
-                  required
-                />
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Context Sensitive Field */}
+            {entryMode === 'payment' ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Recipient</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">@</span>
+                  <input
+                    type="text"
+                    value={receiver}
+                    onChange={(e) => setReceiver(e.target.value.toLowerCase())}
+                    className="w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hive-red focus:border-transparent transition-all outline-none"
+                    placeholder="username"
+                    required
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reference TX (ID or Link)</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">#</span>
+                  <input
+                    type="text"
+                    value={externalTx}
+                    onChange={(e) => setExternalTx(e.target.value)}
+                    className="w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hive-red focus:border-transparent transition-all outline-none"
+                    placeholder={t('dashboard.tx_placeholder')}
+                    required
+                  />
+                </div>
+                <p className="mt-1 text-[10px] text-hive-gray italic">
+                  * No funds will be transferred. This only records the accounting entry referencing this TX.
+                </p>
+              </div>
+            )}
 
             {/* Amount + Currency */}
             <div className="grid grid-cols-3 gap-4">
@@ -457,7 +529,7 @@ const AccountingDashboard = () => {
             <button
               type="submit"
               disabled={status === 'processing' || !journalPreview}
-              className="w-full py-4 bg-hive-red hover:bg-red-700 text-white rounded-xl font-bold transition-colors flex items-center justify-center gap-2 shadow-lg shadow-red-500/30 disabled:opacity-70 mt-4"
+              className="w-full py-4 bg-hive-red hover:bg-red-700 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-500/30 disabled:opacity-70 mt-4 active:scale-95"
             >
               {status === 'processing' ? (
                 <>
@@ -466,7 +538,7 @@ const AccountingDashboard = () => {
                 </>
               ) : (
                 <>
-                  Confirm Payment & Record Journal
+                  {entryMode === 'payment' ? t('dashboard.confirm_payment') : t('dashboard.register_tx')}
                   <Send className="w-5 h-5 ml-1" />
                 </>
               )}
@@ -483,9 +555,10 @@ const AccountingDashboard = () => {
               <h3 className="text-lg font-bold">Atomic On-Chain Audit</h3>
             </div>
             <p className="text-gray-300 text-sm leading-relaxed mb-6">
-              Each payment broadcasts a <code className="bg-black/30 px-2 py-1 rounded mx-1 text-red-300 font-mono text-xs">transfer</code> and a{' '}
-              <code className="bg-black/30 px-2 py-1 rounded mx-1 text-red-300 font-mono text-xs">custom_json</code> journal entry
-              in <strong>one atomic transaction</strong> — one Keychain prompt, one block, one TX ID.
+              {entryMode === 'payment' 
+                ? "Each payment broadcasts a transfer and a custom_json journal entry in one atomic transaction — one Keychain prompt, one block, one TX ID."
+                : "Registering an external TX records a custom_json referencing the source transaction. This ensures audits cover all asset movements."
+              }
             </p>
             <ul className="space-y-3 text-sm text-gray-300">
               <li className="flex items-start gap-2">
@@ -495,13 +568,6 @@ const AccountingDashboard = () => {
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />
                 <span>Double-entry accounting on-chain</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />
-                <span>
-                  Ledger ID:{' '}
-                  <span className="text-white font-mono text-xs">hive_accounting_ledger</span>
-                </span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />
@@ -519,12 +585,15 @@ const AccountingDashboard = () => {
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-1">Transaction Confirmed!</h3>
                 <p className="text-gray-500 text-xs mb-5">
-                  Transfer + journal entry recorded atomically on Hive blockchain.
+                  {entryMode === 'payment' 
+                    ? "Transfer + journal entry recorded atomically on Hive blockchain."
+                    : "Manual ledger entry successfully linked to external TX."
+                  }
                 </p>
 
                 <div className="w-full bg-gray-50 rounded-xl p-4 text-left border border-gray-100 space-y-2">
                   <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide">
-                    Transaction ID (Transfer + Journal)
+                    {entryMode === 'payment' ? 'Transaction ID' : 'Entry TX ID'}
                   </p>
                   <p className="font-mono text-xs text-gray-800 break-all">{txId || '—'}</p>
                   <div className="flex gap-2 pt-1">
@@ -536,24 +605,6 @@ const AccountingDashboard = () => {
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
                       HiveHub
-                    </a>
-                    <a
-                      href={`https://hiveblocks.com/tx/${txId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:underline"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      HiveBlocks
-                    </a>
-                    <a
-                      href={`https://hiveexplorer.com/?trxid=${txId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:underline"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      Explorer
                     </a>
                   </div>
                 </div>

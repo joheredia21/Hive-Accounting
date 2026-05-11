@@ -4,15 +4,38 @@
 
 @layer base {
   body {
-    @apply bg-hive-light text-hive-dark antialiased;
+    @apply bg-hive-light text-hive-dark antialiased selection:bg-hive-red selection:text-white;
+    font-feature-settings: "ss01", "ss02", "cv01", "cv02";
   }
 }
 
-/* Custom animations if needed */
+@layer components {
+  .glass {
+    @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-xl;
+  }
+  
+  .glass-dark {
+    @apply bg-hive-dark/80 backdrop-blur-lg border border-white/10 shadow-2xl;
+  }
+  
+  .btn-primary {
+    @apply px-6 py-3 bg-hive-red text-white rounded-xl font-bold transition-all hover:bg-red-700 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-red-500/30 disabled:opacity-50;
+  }
+  
+  .btn-secondary {
+    @apply px-6 py-3 bg-white text-hive-dark border border-gray-200 rounded-xl font-bold transition-all hover:bg-gray-50 hover:scale-[1.02] active:scale-[0.98] shadow-sm;
+  }
+
+  .input-premium {
+    @apply w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hive-red focus:border-transparent transition-all outline-none;
+  }
+}
+
+/* Custom animations */
 @keyframes slide-up {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(20px);
   }
   to {
     opacity: 1;
@@ -20,6 +43,43 @@
   }
 }
 
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.1; }
+  50% { opacity: 0.3; }
+}
+
 .animate-slide-up {
-  animation: slide-up 0.3s ease-out forwards;
+  animation: slide-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.8s ease-out forwards;
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 8s ease-in-out infinite;
+}
+
+/* Custom Gradients */
+.bg-mesh {
+  background-image: 
+    radial-gradient(at 0% 0%, hsla(350, 85%, 48%, 0.1) 0, transparent 50%), 
+    radial-gradient(at 100% 0%, hsla(210, 10%, 16%, 0.05) 0, transparent 50%), 
+    radial-gradient(at 100% 100%, hsla(350, 85%, 48%, 0.1) 0, transparent 50%), 
+    radial-gradient(at 0% 100%, hsla(210, 10%, 16%, 0.05) 0, transparent 50%);
 }

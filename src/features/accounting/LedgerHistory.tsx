@@ -261,6 +261,11 @@ const LedgerHistory = ({ username }: LedgerHistoryProps) => {
                             {entry.category.replace(/_/g, ' ')}
                           </span>
                         )}
+                        {entry.externalReference && (
+                          <span className="ml-1 mt-0.5 px-1.5 py-0.5 bg-blue-50 text-blue-600 text-[10px] rounded-full uppercase font-bold inline-block">
+                            EXT REF
+                          </span>
+                        )}
                       </td>
 
                       {/* Recipient */}
