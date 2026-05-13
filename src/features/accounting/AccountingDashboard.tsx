@@ -1,7 +1,7 @@
 import { useState, useEffect, FormEvent, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Wallet, Send, FileCheck, CheckCircle2, AlertCircle, LogIn,
+  Wallet, Send, FileCheck, CheckCircle2, AlertCircle,
   Activity, BookOpen, ChevronDown, ChevronUp, Scale, Eye, EyeOff,
   ExternalLink, Hash, ArrowLeft
 } from 'lucide-react';
@@ -277,9 +277,11 @@ const AccountingDashboard = ({ onLogout }: { onLogout?: () => void }) => {
             Back
           </button>
           <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center">
-              <LogIn className="w-8 h-8 text-hive-red" />
-            </div>
+            <img 
+              src="https://files.peakd.com/file/peakd-hive/joheredia21/23uQtuwkDLZfCzn6YTdXZFTf64Xe3xMLBUMFT3LTNicRjk43MCUWgsUGaXfS59WFPbHZu.png" 
+              alt="Hive Accounting" 
+              className="w-16 h-16 object-contain"
+            />
           </div>
           <h2 className="text-2xl font-bold text-center text-hive-dark mb-2">Sign In</h2>
           <p className="text-hive-gray text-center mb-8">
@@ -312,7 +314,7 @@ const AccountingDashboard = ({ onLogout }: { onLogout?: () => void }) => {
             <button
               type="submit"
               disabled={status === 'processing' || !username}
-              className="w-full py-3 px-4 bg-hive-dark hover:bg-black text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
+              className="w-full py-3 px-4 bg-hive-red hover:bg-red-700 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
             >
               {status === 'processing' ? (
                 <Activity className="w-5 h-5 animate-spin" />

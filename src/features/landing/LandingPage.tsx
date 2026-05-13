@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { client } from '../../services/hive-api';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { 
@@ -21,6 +22,122 @@ interface LandingPageProps {
 const LandingPage = ({ onStartAudit, onGoToDashboard }: LandingPageProps) => {
   const { t } = useTranslation();
   const [auditAccount, setAuditAccount] = useState('');
+  const [currentBlock, setCurrentBlock] = useState<number>(0);
+  const [liveTransactions, setLiveTransactions] = useState<any[]>([]);
+
+  useEffect(() => {
+    // 1. Fetch current block and update periodically
+    const updateBlock = async () => {
+      try {
+        const props = await client.database.getDynamicGlobalProperties();
+        setCurrentBlock(props.head_block_number);
+      } catch (e) {
+        console.error('Error fetching block:', e);
+      }
+    };
+    updateBlock();
+    const blockInterval = setInterval(updateBlock, 3000);
+
+    // 2. Poll for recent platform transactions (custom_json with app id)
+    let allPlatformOps: any[] = [];
+    let currentIndex = 0;
+    let cycleInterval: any;
+
+    const fetchLiveOps = async () => {
+      try {
+        // Fetch from accounts known to use the platform
+        const [history1, history2] = await Promise.all([
+          client.database.getAccountHistory('joheredia21', -1, 1000).catch(() => []),
+          client.database.getAccountHistory('buildingdaytest', -1, 1000).catch(() => [])
+        ]);
+        
+        const combinedHistory = [...history1, ...history2];
+        
+        let platformOps = combinedHistory
+          .filter((item: any) => {
+            const op = item[1].op;
+            return op[0] === 'custom_json' && op[1].id === 'hive_accounting_ledger';
+          })
+          .map((item: any) => {
+            const tx = item[1];
+            const op = tx.op;
+            const body = op[1];
+            
+            let amount = '';
+            let memo = '';
+            let receiver = '';
+
+            try {
+              const json = JSON.parse(body.json);
+              const journal = json.journal;
+              
+              if (journal) {
+                // Sum all debits for the amount
+                const totalDebit = journal.lines.reduce((s: number, l: any) => s + (l.debit || 0), 0);
+                amount = `${totalDebit.toFixed(3)} ${journal.currency || 'HIVE'}`;
+                memo = journal.description || 'Ledger Entry';
+                receiver = journal.payee || tx.sender || '—';
+              } else {
+                amount = json.data?.amount || '0.000';
+                memo = json.data?.memo || 'Ledger Entry';
+                receiver = json.data?.receiver || '—';
+              }
+            } catch (e) {
+              amount = '0.000';
+              memo = 'Platform Activity';
+            }
+
+            return {
+              id: tx.trx_id,
+              time: tx.timestamp,
+              amount,
+              memo,
+              receiver,
+              type: 'ledger'
+            };
+          });
+
+        // Deduplicate by id just in case both accounts were involved in the same tx
+        platformOps = platformOps.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
+        
+        // Sort by timestamp descending
+        platformOps.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+
+        if (platformOps.length > 0) {
+          allPlatformOps = platformOps;
+          updateDisplay();
+          if (!cycleInterval) {
+            cycleInterval = setInterval(updateDisplay, 4000);
+          }
+        }
+      } catch (e) {
+        console.error('Error in fetchLiveOps:', e);
+      }
+    };
+
+    const updateDisplay = () => {
+      if (allPlatformOps.length === 0) return;
+      const displayOps = [];
+      for (let i = 0; i < 3; i++) {
+        const index = (currentIndex + i) % allPlatformOps.length;
+        displayOps.push({ 
+          ...allPlatformOps[index], 
+          uniqueId: `${allPlatformOps[index].id}-${Date.now()}-${i}` 
+        });
+      }
+      setLiveTransactions(displayOps);
+      currentIndex = (currentIndex + 1) % allPlatformOps.length;
+    };
+
+    fetchLiveOps();
+    const fetchInterval = setInterval(fetchLiveOps, 60000);
+
+    return () => {
+      clearInterval(blockInterval);
+      clearInterval(fetchInterval);
+      if (cycleInterval) clearInterval(cycleInterval);
+    };
+  }, []);
 
   const handleAuditSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,9 +157,11 @@ const LandingPage = ({ onStartAudit, onGoToDashboard }: LandingPageProps) => {
       {/* Navigation */}
       <nav className="relative z-10 flex items-center justify-between px-6 py-6 max-w-7xl mx-auto">
         <div className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-hive-red rounded-xl flex items-center justify-center shadow-lg shadow-red-500/20">
-            <span className="text-white font-black text-2xl">H</span>
-          </div>
+          <img 
+            src="https://files.peakd.com/file/peakd-hive/joheredia21/23uQtuwkDLZfCzn6YTdXZFTf64Xe3xMLBUMFT3LTNicRjk43MCUWgsUGaXfS59WFPbHZu.png" 
+            alt="Hive Accounting" 
+            className="w-10 h-10 object-contain"
+          />
           <span className="text-xl font-black tracking-tight text-hive-dark hidden sm:block">
             Hive Accounting
           </span>
@@ -52,7 +171,7 @@ const LandingPage = ({ onStartAudit, onGoToDashboard }: LandingPageProps) => {
           <LanguageToggle />
           <button 
             onClick={onGoToDashboard}
-            className="px-5 py-2 bg-hive-dark text-white text-sm font-bold rounded-full hover:bg-black transition-all shadow-lg active:scale-95"
+            className="px-5 py-2 bg-hive-red text-white text-sm font-bold rounded-full hover:bg-red-600 transition-all shadow-lg active:scale-95"
           >
             {t('landing.transact_button')}
           </button>
@@ -119,20 +238,51 @@ const LandingPage = ({ onStartAudit, onGoToDashboard }: LandingPageProps) => {
                 </div>
                 <div className="text-right">
                   <p className="text-xs font-bold text-green-500 uppercase">Live Network</p>
-                  <p className="text-sm font-mono text-hive-dark">Block #82,342,109</p>
+                  <p className="text-sm font-mono text-hive-dark">
+                    Block #{currentBlock > 0 ? currentBlock.toLocaleString() : '82,342,109'}
+                  </p>
                 </div>
               </div>
 
               <div className="space-y-4">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="flex items-center justify-between p-4 bg-white/50 rounded-2xl border border-gray-100">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-2 bg-gray-100 rounded-full" />
-                      <div className="w-24 h-4 bg-gray-50 rounded-full" />
+                {liveTransactions.length > 0 ? (
+                  liveTransactions.map((tx) => (
+                    <motion.div 
+                      key={tx.uniqueId || tx.id} 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center justify-between p-4 bg-white/50 rounded-2xl border border-gray-100 hover:bg-white transition-colors"
+                    >
+                      <div className="flex items-center gap-4 overflow-hidden">
+                        <div className="w-2 h-2 bg-hive-red rounded-full flex-shrink-0 animate-pulse" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-hive-dark truncate max-w-[150px]">
+                            {tx.memo || 'Platform Transaction'}
+                          </p>
+                          <p className="text-[10px] text-hive-gray font-mono">@{tx.receiver}</p>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-sm font-black text-hive-red">
+                          {typeof tx.amount === 'string' ? tx.amount.split(' ')[0] : tx.amount}
+                        </p>
+                        <p className="text-[10px] font-bold text-hive-gray">
+                          {typeof tx.amount === 'string' ? tx.amount.split(' ')[1] || 'HIVE' : 'HIVE'}
+                        </p>
+                      </div>
+                    </motion.div>
+                  ))
+                ) : (
+                  [1, 2, 3].map(i => (
+                    <div key={i} className="flex items-center justify-between p-4 bg-white/50 rounded-2xl border border-gray-100 animate-pulse">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-2 bg-gray-100 rounded-full" />
+                        <div className="w-24 h-4 bg-gray-50 rounded-full" />
+                      </div>
+                      <div className="w-16 h-4 bg-gray-100 rounded-full" />
                     </div>
-                    <div className="w-16 h-4 bg-gray-100 rounded-full" />
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
 
               <div className="mt-8 pt-8 border-t border-gray-100 flex items-center justify-between">
@@ -261,9 +411,11 @@ const LandingPage = ({ onStartAudit, onGoToDashboard }: LandingPageProps) => {
       <footer className="relative z-10 border-t border-gray-200 bg-white py-12">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-hive-red rounded-lg flex items-center justify-center">
-              <span className="text-white font-black text-lg">H</span>
-            </div>
+            <img 
+              src="https://files.peakd.com/file/peakd-hive/joheredia21/23uQtuwkDLZfCzn6YTdXZFTf64Xe3xMLBUMFT3LTNicRjk43MCUWgsUGaXfS59WFPbHZu.png" 
+              alt="Hive Accounting" 
+              className="w-8 h-8 object-contain"
+            />
             <span className="text-lg font-black tracking-tight text-hive-dark">
               Hive Accounting
             </span>
